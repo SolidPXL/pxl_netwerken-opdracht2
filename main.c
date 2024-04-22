@@ -150,17 +150,6 @@ void execution( int internet_socket )
 	char buffer[50];
 	struct sockaddr_storage client_internet_address;
 	socklen_t client_internet_address_length = sizeof client_internet_address;
-	// number_of_bytes_received = recvfrom( internet_socket, buffer, ( sizeof buffer ) - 1, 0, (struct sockaddr *) &client_internet_address, &client_internet_address_length );
-	// if( number_of_bytes_received == -1 )
-	// {
-	// 	perror( "recvfrom" );
-	// }
-	// else
-	// {
-	// 	buffer[number_of_bytes_received] = '\0';
-	// 	printf( "Received : %s\n", buffer );
-	// }
-	
 	struct Guesser highest_guess;
 
 	int timeout = 8000;
@@ -208,17 +197,29 @@ void execution( int internet_socket )
 			break;
 		}
 	}
-	char hostBuf[50] = {'\0'};
-	getnameinfo((void*)(&highest_guess.adress),sizeof(highest_guess.adress),hostBuf,sizeof(hostBuf),NULL,0,NI_NUMERICHOST);
-	printf("Highest guess:\nip:\t%s\nguess:\t%d\ndif:\t%d\n",hostBuf,highest_guess.guess,highest_guess.dif);
-	
+	char addrBuf[50] = {'\0'};
+	char portBuf[20] = {'\0'};
+	getnameinfo((void*)(&highest_guess.adress),sizeof(highest_guess.adress),addrBuf,sizeof(addrBuf),portBuf,sizeof(portBuf),NI_NUMERICHOST);
+	printf("Highest guess:\nip:\t%s\nguess:\t%d\ndif:\t%d\nport:\t%s\n",addrBuf,highest_guess.guess,highest_guess.dif,portBuf);
 
-	//Step 2.2
-	int number_of_bytes_send = 0;
-	number_of_bytes_send = sendto( internet_socket, "Hello UDP world!", 16, 0, (struct sockaddr *) &client_internet_address, client_internet_address_length );
-	if( number_of_bytes_send == -1 )
-	{
-		perror( "sendto" );
+	//'Lines closed' send message to possible winner and initiate no message timer
+	const char message[] = "You won ?";
+	const int lineTimeout = 16000;
+	sendto(internet_socket,message,sizeof(message)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
+	setsockopt(internet_socket,SOL_SOCKET,SO_RCVTIMEO,(DWORD*)&lineTimeout,sizeof(lineTimeout));
+	number_of_bytes_received = recvfrom( internet_socket, buffer, ( sizeof buffer ) - 1, 0, (struct sockaddr *) &client_internet_address, &client_internet_address_length );
+
+	if(number_of_bytes_received == -1){
+		if(WSAGetLastError()==WSAETIMEDOUT){
+			//Bytes received is -1 because it timed out
+
+			//Add check to match if the incomming message is from the highest guesser
+			const char winMessage[] = "You won !";
+			sendto(internet_socket,winMessage,sizeof(winMessage)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
+		}
+	} else{
+		const char failMessage[] = "You Lost !";
+		sendto(internet_socket,failMessage,sizeof(failMessage)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
 	}
 }
 
