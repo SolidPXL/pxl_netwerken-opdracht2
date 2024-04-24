@@ -144,7 +144,7 @@ void compareGuess(){
 void execution( int internet_socket )
 {
 	//rng positive int less then 1000
-	const int number_to_guess = rand()%1000;
+	const int number_to_guess = rand()%100;
 	//Step 2.1
 	int number_of_bytes_received = 0;
 	char buffer[50];
