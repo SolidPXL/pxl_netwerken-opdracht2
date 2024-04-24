@@ -12,6 +12,7 @@
 	#include <unistd.h> //for close
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
+	#include <time.h>  // for random guess 
 
 	void OSInit( void )
 	{
@@ -52,6 +53,7 @@ int initialization( struct sockaddr ** internet_address, socklen_t * internet_ad
 void execution( int internet_socket, struct sockaddr * internet_address, socklen_t internet_address_length );
 void cleanup( int internet_socket, struct sockaddr * internet_address );
 void wait_for_response(int internet_socket, struct sockaddr *internet_address, socklen_t internet_address_length);
+int asking_client_for_guesses();
 
 
 #define TIMEOUT_SEC 16  //timeout after sending the last message.
@@ -126,15 +128,27 @@ int initialization( struct sockaddr ** internet_address, socklen_t * internet_ad
 
 void execution(int internet_socket, struct sockaddr *internet_address, socklen_t internet_address_length)
 {
+   int total_guesses =  asking_client_for_guesses(); //create random guess between 0-100 do this the amount of times the client input in this function. 
+	for(int i = 0; i < total_guesses; i++){
+	int rand_nr =  rand()%100;
+	char ch_guess[2] ;
+	itoa(rand_nr,ch_guess,3);
+	
+	
     // Step 2.1
     int number_of_bytes_send = 0;
-    number_of_bytes_send = sendto(internet_socket, "16", 2, 0, internet_address, internet_address_length); // send a number to the server.
+    number_of_bytes_send = sendto(internet_socket, ch_guess , sizeof(ch_guess-1), 0, internet_address, internet_address_length); // send a number to the server.
     if (number_of_bytes_send == -1)
     {
         perror("sendto");
         close(internet_socket);
         exit(EXIT_FAILURE);
     }
+	else 
+	{
+		printf("Guess send to server.\n");
+	}
+	}
 	
 wait_for_response(internet_socket, internet_address, internet_address_length);
 
@@ -167,7 +181,7 @@ void wait_for_response(int internet_socket, struct sockaddr *internet_address, s
      int retval = select(internet_socket + 1, &readfds, NULL, NULL, &tv);
     if (retval == -1)
     {
-        perror("poll()");
+        perror("select()");
         close(internet_socket);
         exit(EXIT_FAILURE);
     }
@@ -199,4 +213,12 @@ void wait_for_response(int internet_socket, struct sockaddr *internet_address, s
         }
 	}
 
+}
+
+int asking_client_for_guesses(){
+	int guess = 0;
+	printf("How many times do you want to guess?: ");
+	scanf("%d",&guess);
+	
+	return guess;
 }
