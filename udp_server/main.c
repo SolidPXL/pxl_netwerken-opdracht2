@@ -1,5 +1,3 @@
-#include <math.h>
-#include <time.h>
 
 #ifdef _WIN32
 	#define _WIN32_WINNT _WIN32_WINNT_WIN7
@@ -8,6 +6,9 @@
 	#include <stdio.h> //for fprintf, perror
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
+	#include <math.h>
+	#include <time.h>
+	
 	void OSInit( void )
 	{
 		WSADATA wsaData;
