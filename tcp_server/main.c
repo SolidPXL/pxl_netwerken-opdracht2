@@ -6,6 +6,7 @@
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
 	#include <time.h>
+	#include <stdint.h>
 	void OSInit( void )
 	{
 		WSADATA wsaData;
@@ -158,9 +159,10 @@ int connection( int internet_socket )
 void execution( int internet_socket )
 {
 	//Step 3.1
-	int number_to_guess = rand()%1000000;
+	uint32_t number_to_guess = rand()%1000000;
 	int number_of_bytes_received = 0;
-	int guessed_number;
+	uint32_t guessed_number;
+	printf("numer %ld\n",number_to_guess);
 
 	while(1){
 		number_of_bytes_received = recv( internet_socket, (char*)&guessed_number, ( sizeof guessed_number ), 0 );
@@ -171,16 +173,36 @@ void execution( int internet_socket )
 		}
 		else
 		{
+			//Go from network byte order to 'normal' byte order
+			guessed_number = htonl(guessed_number);
 			printf( "Received : %d\n", guessed_number );
 		}
 
 		//Step 3.2
 		int number_of_bytes_send = 0;
-		number_of_bytes_send = send( internet_socket, "Hello TCP world!", 16, 0 );
-		if( number_of_bytes_send == -1 )
-		{
-			perror( "send" );
+		if(guessed_number < number_to_guess){
+			number_of_bytes_send = send( internet_socket, "Higher!", 7, 0 );
+			if( number_of_bytes_send == -1 )
+			{
+				perror( "send" );
+			}
+		} else if (guessed_number > number_to_guess){
+			number_of_bytes_send = send( internet_socket, "Lower!", 6, 0 );
+			if( number_of_bytes_send == -1 )
+			{
+				perror( "send" );
+			}
+		} else {
+			number_of_bytes_send = send( internet_socket, "Correct!", 8, 0 );
+			if( number_of_bytes_send == -1 )
+			{
+				perror( "send" );
+			}
+			break;
 		}
+	
+		
+		memset(&guessed_number,0,sizeof(guessed_number));
 	}
 	
 }
