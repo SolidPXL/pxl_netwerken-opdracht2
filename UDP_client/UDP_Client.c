@@ -12,7 +12,7 @@
 	#include <unistd.h> //for close
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
-	#include <time.h>  // for random guess 
+	#include <ctype.h> 
 
 	void OSInit( void )
 	{
@@ -35,7 +35,7 @@
 #else
 	#include <sys/socket.h> //for sockaddr, socket, socket
 	#include <sys/types.h> //for size_t
-	#include <sys/time.h>
+	#include <sys/time.h> 
 	#include <netdb.h> //for getaddrinfo
 	#include <netinet/in.h> //for sockaddr_in
 	#include <arpa/inet.h> //for htons, htonl, inet_pton, inet_ntop
@@ -44,19 +44,20 @@
 	#include <unistd.h> //for close
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
+	#include <ctype.h>
 	void OSInit( void ) {}
 	void OSCleanup( void ) {}
 #endif
 
 
 int initialization( struct sockaddr ** internet_address, socklen_t * internet_address_length );
-void execution( int internet_socket, struct sockaddr * internet_address, socklen_t internet_address_length );
-void cleanup( int internet_socket, struct sockaddr * internet_address );
+void execution( int internet_socket, struct sockaddr * internet_address, socklen_t internet_address_length, char* guess );
+void cleanup( int internet_socket, struct sockaddr * internet_address, char *play_again );
 void wait_for_response(int internet_socket, struct sockaddr *internet_address, socklen_t internet_address_length);
-int asking_client_for_guesses();
+void asking_client_for_guesses(char* ch_guess);
+void play_another_round(char *play_again);
 
-
-#define TIMEOUT_SEC 16  //timeout after sending the last message.
+#define TIMEOUT_SEC 16  //timeout after sending the message to server
 
 
 int main( int argc, char * argv[] )
@@ -67,12 +68,25 @@ int main( int argc, char * argv[] )
 	socklen_t internet_address_length = 0;
 	
 	int internet_socket = initialization( &internet_address, &internet_address_length );
+	char ch_guess[4];
+	char *play_again = malloc(sizeof(char)); // Allocate memory for a character
+	*play_again = 'Y'; // Initialize with 'Y' or any other initial value
+	do
+	{
 	
-
-	execution( internet_socket, internet_address, internet_address_length );
-
-
-	cleanup( internet_socket, internet_address );
+	asking_client_for_guesses(ch_guess);
+		
+	execution( internet_socket, internet_address, internet_address_length, ch_guess );
+	
+	wait_for_response(internet_socket, internet_address, internet_address_length);
+	
+	play_another_round(play_again);
+	
+	} 
+	while (*play_again == 'Y' || *play_again == 'y'); // Dereference play_again
+	
+	
+	cleanup( internet_socket, internet_address , play_again);
 
 	OSCleanup();
 
@@ -87,7 +101,7 @@ int initialization( struct sockaddr ** internet_address, socklen_t * internet_ad
 	memset( &internet_address_setup, 0, sizeof internet_address_setup );
 	internet_address_setup.ai_family = AF_UNSPEC;
 	internet_address_setup.ai_socktype = SOCK_DGRAM;
-	int getaddrinfo_return = getaddrinfo( "::1", "24042", &internet_address_setup, &internet_address_result );
+	int getaddrinfo_return = getaddrinfo( "127.0.0.1", "24042", &internet_address_setup, &internet_address_result );//localhost IPv4 : 127.0.0.1  for IPv6 : 0:0:1
 	if( getaddrinfo_return != 0 )
 	{
 		fprintf( stderr, "getaddrinfo: %s\n", gai_strerror( getaddrinfo_return ) ); 
@@ -126,15 +140,8 @@ int initialization( struct sockaddr ** internet_address, socklen_t * internet_ad
 	return internet_socket;
 }
 
-void execution(int internet_socket, struct sockaddr *internet_address, socklen_t internet_address_length)
-{
-   int total_guesses =  asking_client_for_guesses(); //create random guess between 0-100 do this the amount of times the client input in this function. 
-	for(int i = 0; i < total_guesses; i++){
-	int rand_nr =  rand()%100;
-	char ch_guess[2] ;
-	itoa(rand_nr,ch_guess,3);
-	
-	
+void execution(int internet_socket, struct sockaddr *internet_address, socklen_t internet_address_length, char* ch_guess)
+{	
     // Step 2.1
     int number_of_bytes_send = 0;
     number_of_bytes_send = sendto(internet_socket, ch_guess , sizeof(ch_guess-1), 0, internet_address, internet_address_length); // send a number to the server.
@@ -148,21 +155,21 @@ void execution(int internet_socket, struct sockaddr *internet_address, socklen_t
 	{
 		printf("Guess send to server.\n");
 	}
-	}
 	
-wait_for_response(internet_socket, internet_address, internet_address_length);
-
-	wait_for_response(internet_socket, internet_address, internet_address_length);
 }
 
 
-void cleanup( int internet_socket, struct sockaddr * internet_address )
+void cleanup( int internet_socket, struct sockaddr * internet_address ,char *play_again )
 {
 	//Step 3.2
+	printf("Start cleanup fase\n");
 	free( internet_address );
+	free( play_again);
+	
 
 	//Step 3.1
 	close( internet_socket );
+	printf("Cleanup ended\n");
 }
 
 
@@ -187,8 +194,8 @@ void wait_for_response(int internet_socket, struct sockaddr *internet_address, s
     }
     else if (retval == 0)
     {
-        // Timeout occurred
-    printf("I'm lost\n");	
+    // Timeout occurred
+    printf("You lost?\n");	
     }
     else
     {
@@ -208,17 +215,45 @@ void wait_for_response(int internet_socket, struct sockaddr *internet_address, s
             {
                 buffer[number_of_bytes_received] = '\0';
                 printf("Received: %s\n", buffer);
-			
+			wait_for_response(internet_socket, internet_address, internet_address_length);
             }
         }
 	}
-
 }
 
-int asking_client_for_guesses(){
+void asking_client_for_guesses(char* ch_guess)
+{
 	int guess = 0;
-	printf("How many times do you want to guess?: ");
+	printf("What number do you want to Guess??: ");
 	scanf("%d",&guess);
-	
-	return guess;
+	itoa(guess,ch_guess,10);
+}
+
+void play_another_round(char *play_again)
+{
+    char answer = '0';
+    printf("Do you want to play another round? (Y or N): ");
+    scanf(" %c", &answer);
+   
+    if (isalpha(answer))
+    {      
+		if (toupper(answer) == 'Y')
+		{
+			*play_again = 'Y';
+		}
+		else if (toupper(answer) == 'N')
+		{
+			*play_again = 'N';
+		}
+		else
+		{
+        printf("Please put Y or N\n");
+        play_another_round(play_again); // Ask again if input is not Y or N
+		}
+	}
+    else
+    {
+        printf("Please put Y or N\n");
+        play_another_round(play_again); // Ask again if input is not alphabetic
+    }
 }

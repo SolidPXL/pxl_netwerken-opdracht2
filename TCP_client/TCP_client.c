@@ -6,6 +6,7 @@
 	#include <unistd.h> //for close
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
+	#include <stdint.h>
 	void OSInit( void )
 	{
 		WSADATA wsaData;
@@ -32,6 +33,7 @@
 	#include <unistd.h> //for close
 	#include <stdlib.h> //for exit
 	#include <string.h> //for memset
+	#include <stdint.h>
 	void OSInit( void ) {}
 	void OSCleanup( void ) {}
 #endif
@@ -40,6 +42,7 @@ int initialization();
 void execution( int internet_socket );
 void cleanup( int internet_socket );
 int32_t message_to_send();
+void check_for_win(char* buffer, int internet_socket);
 
 int main( int argc, char * argv[] )
 {
@@ -55,11 +58,11 @@ int main( int argc, char * argv[] )
 	/////////////
 	//Execution//
 	/////////////
-	for(;;;){
+
 		
 	execution( internet_socket );
 	
-	}
+	
 
 	////////////
 	//Clean up//
@@ -139,17 +142,18 @@ void execution( int internet_socket )
 
 	//Step 2.2
 	int number_of_bytes_received = 0;
-	int32_t buffer= 0;
-	number_of_bytes_received = recv( internet_socket, &buffer, sizeof(uint32_t), 0 );
+	char  buffer[1000] = {'\0'};
+	number_of_bytes_received = recv( internet_socket, &buffer, sizeof(buffer) - 1, 0 );
 	if( number_of_bytes_received == -1 )
 	{
 		perror( "recv" );
 	}
 	else
 	{
-		buffer = ntohl(buffer);
-		//buffer[number_of_bytes_received] = '\0';
-		printf( "Received : %d\n", buffer );
+		buffer[number_of_bytes_received] = '\0';
+		printf( "Received : %s\n", buffer );
+		//check for win : 
+		check_for_win(buffer , internet_socket);
 	}
 }
 
@@ -172,4 +176,29 @@ int32_t message_to_send()
 	printf("Make your guess between 0 and 1000000: ");
 	scanf("%d",&number);
 	return number;
+}
+
+void check_for_win( char* buffer, int internet_socket)
+{
+	//printf("do you come here?\n"); //for debugging i printed this message here
+	printf("Buffer = %s", buffer);
+	if (strcmp(buffer, "correct")==0)
+	{
+		char play_again;								// when i won ask client if he wants to play again of close the program by calling the cleanup function.
+		printf("Do you want to play again?(Y/N)");
+		scanf("%s",play_again);
+		if (strcmp(play_again,"Y")==0)
+		{
+			execution( internet_socket );
+		}
+		else if (strcmp(play_again, "N") == 0)
+		{
+			cleanup( internet_socket) ;
+		}
+	}
+	else 												//number not yet right so re-run the execution over and over.
+	{
+		//printf("not yet won\n"); //for debugging i printed this message
+		execution( internet_socket );
+	}
 }
