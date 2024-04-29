@@ -42,6 +42,7 @@
 int initialization();
 void execution( int internet_socket );
 void cleanup( int internet_socket );
+// int addrCompare(struct sockaddr_storage left,struct sockaddr_storage right);
 
 int main( int argc, char * argv[] )
 {
@@ -144,7 +145,7 @@ void compareGuess(){
 
 void execution( int internet_socket )
 {
-	//rng positive int less then 1000
+	//rng positive int less than 1000
 	const int number_to_guess = rand()%100;
 	//Step 2.1
 	int number_of_bytes_received = 0;
@@ -175,7 +176,7 @@ void execution( int internet_socket )
 	while (1)
 	{
 		printf("Inside of loop\n");
-		setsockopt(internet_socket,SOL_SOCKET,SO_RCVTIMEO,(DWORD*)&timeout,sizeof(timeout));
+		setsockopt(internet_socket,SOL_SOCKET,SO_RCVTIMEO,(const char*)&timeout,sizeof(timeout));
 		number_of_bytes_received = recvfrom( internet_socket, buffer, ( sizeof buffer ) - 1, 0, (struct sockaddr *) &client_internet_address, &client_internet_address_length );
 		if(number_of_bytes_received != -1){
 			//Compare if this is the newest closest guess
@@ -205,23 +206,44 @@ void execution( int internet_socket )
 
 	//'Lines closed' send message to possible winner and initiate no message timer
 	const char message[] = "You won ?";
-	const int lineTimeout = 16000;
+	long unsigned int lineTimeout = 16000;
+	const long int endTime = (long int)time(NULL)+16;
 	sendto(internet_socket,message,sizeof(message)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
-	setsockopt(internet_socket,SOL_SOCKET,SO_RCVTIMEO,(DWORD*)&lineTimeout,sizeof(lineTimeout));
-	number_of_bytes_received = recvfrom( internet_socket, buffer, ( sizeof buffer ) - 1, 0, (struct sockaddr *) &client_internet_address, &client_internet_address_length );
+	while(1){
+		lineTimeout = (endTime - (long int)time(NULL))*1000;
+		printf("linetimeout: %ld\n",lineTimeout);
+		setsockopt(internet_socket,SOL_SOCKET,SO_RCVTIMEO,(const char*)&lineTimeout,sizeof(lineTimeout));
+		number_of_bytes_received = recvfrom( internet_socket, buffer, ( sizeof buffer ) - 1, 0, (struct sockaddr *) &client_internet_address, &client_internet_address_length );
 
-	if(number_of_bytes_received == -1){
-		if(WSAGetLastError()==WSAETIMEDOUT){
-			//Bytes received is -1 because it timed out
-
-			//Add check to match if the incomming message is from the highest guesser
-			const char winMessage[] = "You won !";
-			sendto(internet_socket,winMessage,sizeof(winMessage)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
+		if(lineTimeout<1){
+			//Safe case, break out of loop if wait time is too short
+			break;
 		}
-	} else{
-		const char failMessage[] = "You Lost !";
-		sendto(internet_socket,failMessage,sizeof(failMessage)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
+		if(number_of_bytes_received == -1){
+			if(WSAGetLastError()==WSAETIMEDOUT){
+				//Bytes received is -1 because it timed out
+
+				//Add check to match if the incomming message is from the highest guesser
+				const char winMessage[] = "You won !";
+				sendto(internet_socket,winMessage,sizeof(winMessage)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
+				break;
+			}
+		} else{
+			//Check if sender is the one with highest guess, if so send you lost and restart game, else send you lost to sender and continue the  16second timer
+			if(memcmp(&highest_guess.adress,&client_internet_address,sizeof(struct sockaddr_storage))==0){
+				printf("Memcompared is 0\n");
+				const char failMessage[] = "You Lost !";
+				(internet_socket,failMessage,sizeof(failMessage)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
+				break;
+			} else{
+				printf("Memcompared is different\n");
+				const char failMessage[] = "You Lost !";
+				sendto(internet_socket,failMessage,sizeof(failMessage)-1,0,(struct sockaddr*)&client_internet_address,sizeof(client_internet_address));
+			}
+			
+		}
 	}
+
 }
 
 void cleanup( int internet_socket )

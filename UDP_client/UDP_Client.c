@@ -102,6 +102,7 @@ int initialization( struct sockaddr ** internet_address, socklen_t * internet_ad
 	internet_address_setup.ai_family = AF_UNSPEC;
 	internet_address_setup.ai_socktype = SOCK_DGRAM;
 	int getaddrinfo_return = getaddrinfo( "127.0.0.1", "24042", &internet_address_setup, &internet_address_result );//localhost IPv4 : 127.0.0.1  for IPv6 : 0:0:1
+
 	if( getaddrinfo_return != 0 )
 	{
 		fprintf( stderr, "getaddrinfo: %s\n", gai_strerror( getaddrinfo_return ) ); 
