@@ -59,9 +59,9 @@ int main( int argc, char * argv[] )
 	//Execution//
 	/////////////
 
-		
+	while (1){
 	execution( internet_socket );
-	
+	}
 	
 
 	////////////
@@ -134,19 +134,30 @@ void execution( int internet_socket )
 	int32_t number = htonl(message_to_send());
 	
 	int number_of_bytes_send = 0;
-	number_of_bytes_send = send( internet_socket, &number , sizeof(uint32_t) , 0 );
+	number_of_bytes_send = send( internet_socket, (const char*)&number , sizeof(uint32_t) , 0 );
 	if( number_of_bytes_send == -1 )
 	{
-		perror( "send" );
+		perror( "send / Server offline" );
+		cleanup(internet_socket);
+		OSCleanup();
+        exit(0);
 	}
 
 	//Step 2.2
 	int number_of_bytes_received = 0;
 	char  buffer[1000] = {'\0'};
-	number_of_bytes_received = recv( internet_socket, &buffer, sizeof(buffer) - 1, 0 );
+	number_of_bytes_received = recv( internet_socket, buffer, sizeof(buffer) - 1, 0 );
 	if( number_of_bytes_received == -1 )
 	{
 		perror( "recv" );
+		
+	}
+	else if (number_of_bytes_received ==0)
+	{
+		printf("Server disconnected");
+		    cleanup(internet_socket);
+			OSCleanup();
+            exit(0);
 	}
 	else
 	{
@@ -159,6 +170,7 @@ void execution( int internet_socket )
 
 void cleanup( int internet_socket )
 {
+	printf("Start clean up\n");
 	//Step 3.2
 	int shutdown_return = shutdown( internet_socket, SD_SEND );
 	if( shutdown_return == -1 )
@@ -168,6 +180,7 @@ void cleanup( int internet_socket )
 
 	//Step 3.1
 	close( internet_socket );
+	printf("Clean up correctly\n");
 }
 
 int32_t message_to_send()
@@ -178,27 +191,42 @@ int32_t message_to_send()
 	return number;
 }
 
-void check_for_win( char* buffer, int internet_socket)
+void check_for_win(char *buffer, int internet_socket)
 {
-	//printf("do you come here?\n"); //for debugging i printed this message here
-	printf("Buffer = %s", buffer);
-	if (strcmp(buffer, "correct")==0)
-	{
-		char play_again;								// when i won ask client if he wants to play again of close the program by calling the cleanup function.
-		printf("Do you want to play again?(Y/N)");
-		scanf("%s",play_again);
-		if (strcmp(play_again,"Y")==0)
-		{
-			execution( internet_socket );
-		}
-		else if (strcmp(play_again, "N") == 0)
-		{
-			cleanup( internet_socket) ;
-		}
-	}
-	else 												//number not yet right so re-run the execution over and over.
-	{
-		//printf("not yet won\n"); //for debugging i printed this message
-		execution( internet_socket );
-	}
+    if (strcmp(buffer, "Correct!") == 0)
+    {
+        char play_again;
+       // printf("Congratulations! You guessed the correct number!\n");
+        printf("Do you want to play again? (Y/N): ");
+        scanf(" %c", &play_again); // Note the space before %c to consume any previous newline characters
+
+        if (play_again == 'Y' || play_again == 'y')
+        {
+            // Send a message to server to indicate the client wants to play again
+            int32_t play_again_msg = htonl(1); // You can choose any value to represent play again
+            int number_of_bytes_send = send(internet_socket, (const char*) &play_again_msg, sizeof(int32_t), 0);
+            if (number_of_bytes_send == -1)
+            {
+                perror("Play again Send error: ");
+            }
+        }
+        else
+        {
+            // Send a message to server to indicate the client wants to stop playing
+            int32_t stop_playing_msg = htonl(0); // You can choose any value to represent stop playing
+            int number_of_bytes_send = send(internet_socket, (const char*) &stop_playing_msg, sizeof(int32_t), 0);
+            if (number_of_bytes_send == -1)
+            {
+                perror("Stop send: ");
+            }
+
+            cleanup(internet_socket);
+			OSCleanup();
+            exit(0);
+        }
+    }
+    else
+    {
+        // The guess was incorrect, continue with the game
+    }
 }

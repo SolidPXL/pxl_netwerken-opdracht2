@@ -69,21 +69,19 @@ int main( int argc, char * argv[] )
 	
 	int internet_socket = initialization( &internet_address, &internet_address_length );
 	char ch_guess[4];
-	char *play_again = malloc(sizeof(char)); // Allocate memory for a character
-	*play_again = 'Y'; // Initialize with 'Y' or any other initial value
+	char *play_again = malloc(sizeof(char)); 
+	*play_again = 'Y'; 
 	do
-	{
-	
+	{	
 	asking_client_for_guesses(ch_guess);
 		
 	execution( internet_socket, internet_address, internet_address_length, ch_guess );
 	
 	wait_for_response(internet_socket, internet_address, internet_address_length);
 	
-	play_another_round(play_again);
-	
+	play_another_round(play_again);	
 	} 
-	while (*play_again == 'Y' || *play_again == 'y'); // Dereference play_again
+	while (*play_again == 'Y' || *play_again == 'y');
 	
 	
 	cleanup( internet_socket, internet_address , play_again);
@@ -175,52 +173,55 @@ void cleanup( int internet_socket, struct sockaddr * internet_address ,char *pla
 
 
 void wait_for_response(int internet_socket, struct sockaddr *internet_address, socklen_t internet_address_length){
-    // Set up the file descriptor set for select
-    fd_set readfds;
-    FD_ZERO(&readfds);
-    FD_SET(internet_socket, &readfds);
-    
-    // Set up the timeout for select
-    struct timeval tv;
-    tv.tv_sec = TIMEOUT_SEC;
-    tv.tv_usec = 0;	 
 	
-	//wait for response or timeout
-     int retval = select(internet_socket + 1, &readfds, NULL, NULL, &tv);
-    if (retval == -1)
-    {
-        perror("select()");
-        close(internet_socket);
-        exit(EXIT_FAILURE);
-    }
-    else if (retval == 0)
-    {
-    // Timeout occurred
-    printf("You lost?\n");	
-    }
-    else
-    {
-        // Response received
-        if (FD_ISSET(internet_socket, &readfds))
-        {
-            int number_of_bytes_received = 0;
-            char buffer[1000];
-            number_of_bytes_received = recvfrom(internet_socket, buffer, sizeof(buffer) - 1, 0, internet_address, &internet_address_length);
-            if (number_of_bytes_received < 0)
-            {
-                perror("recvfrom");
-                close(internet_socket);
-                exit(EXIT_FAILURE);
-            }
-            else
-            {
-                buffer[number_of_bytes_received] = '\0';
-                printf("Received: %s\n", buffer);
-			wait_for_response(internet_socket, internet_address, internet_address_length);
-            }
-        }
+	for (int extra_delay =0 ; extra_delay <= 2 ; extra_delay+=2)
+	{	
+		// Set up the file descriptor set for select
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		FD_SET(internet_socket, &readfds);
+		
+		// Set up the timeout for select
+		struct timeval tv;
+		tv.tv_sec = TIMEOUT_SEC+extra_delay;
+		tv.tv_usec = 0;	 
+		
+		//wait for response or timeout
+		 int retval = select(internet_socket + 1, &readfds, NULL, NULL, &tv);
+		if (retval == -1)
+		{
+			perror("select()");
+			close(internet_socket);
+			exit(EXIT_FAILURE);
+		}
+		else if (retval == 0)
+		{  
+		printf("You lost?\n");	  // Timeout occurred
+		}
+		else
+		{
+			// Response received
+			if (FD_ISSET(internet_socket, &readfds))
+			{
+				int number_of_bytes_received = 0;
+				char buffer[1000];
+				number_of_bytes_received = recvfrom(internet_socket, buffer, sizeof(buffer) - 1, 0, internet_address, &internet_address_length);
+				if (number_of_bytes_received < 0)
+				{
+					perror("recvfrom");
+					close(internet_socket);
+					exit(EXIT_FAILURE);
+				}
+				else
+				{
+					buffer[number_of_bytes_received] = '\0';
+					printf("Received: %s\n", buffer);
+				}
+			}
+		}
 	}
 }
+
 
 void asking_client_for_guesses(char* ch_guess)
 {

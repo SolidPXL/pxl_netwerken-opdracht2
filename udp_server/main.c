@@ -229,6 +229,16 @@ void execution( int internet_socket )
 				//Add check to match if the incomming message is from the highest guesser
 				const char winMessage[] = "You won !";
 				sendto(internet_socket,winMessage,sizeof(winMessage)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
+				/* open file to do tile logging*/
+				FILE *filepointer = fopen("winnerUDP.log", "a");
+				if (filepointer != NULL)
+				{
+					fprintf(filepointer, "Highest guess:\nip:\t%s\nguess:\t%d\ndif:\t%d\nport:\t%s\n",addrBuf,highest_guess.guess,highest_guess.dif,portBuf);
+					fclose(filepointer);
+				}
+				else {
+					printf("Error opening file!\n");
+				}
 				break;
 			}
 		} else{
