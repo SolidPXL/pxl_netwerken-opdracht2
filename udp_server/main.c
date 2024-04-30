@@ -60,7 +60,10 @@ int main( int argc, char * argv[] )
 	//Execution//
 	/////////////
 
-	execution( internet_socket );
+	while(1){
+		execution( internet_socket );
+	}
+	
 	printf("Execution end\n");
 
 	////////////
@@ -233,7 +236,7 @@ void execution( int internet_socket )
 			if(memcmp(&highest_guess.adress,&client_internet_address,sizeof(struct sockaddr_storage))==0){
 				printf("Memcompared is 0\n");
 				const char failMessage[] = "You Lost !";
-				(internet_socket,failMessage,sizeof(failMessage)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
+				sendto(internet_socket,failMessage,sizeof(failMessage)-1,0,(struct sockaddr*)&highest_guess.adress,sizeof(highest_guess.adress));
 				break;
 			} else{
 				printf("Memcompared is different\n");
