@@ -1,46 +1,45 @@
-#ifdef _WIN32
-	#define _WIN32_WINNT _WIN32_WINNT_WIN7
-	#include <winsock2.h> //for all socket programming
-	#include <ws2tcpip.h> //for getaddrinfo, inet_pton, inet_ntop
-	#include <stdio.h> //for fprintf, perror
-	#include <stdlib.h> //for exit
-	#include <string.h> //for memset
-	#include <time.h>
-	#include <stdint.h>
-	void OSInit( void )
+#define _WIN32_WINNT                  0x0A00 // Windows 10
+#define INCL_WINSOCK_API_PROTOTYPES 1
+#define WIN32_LEAN_AND_MEAN
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#include <stdio.h> //for fprintf, perror
+#include <stdlib.h> //for exit
+#include <string.h> //for memset
+#include <time.h>
+#include <stdint.h>
+
+#pragma comment(lib,"ws2_32")
+
+void OSInit( void )
+{
+	WSADATA wsaData;
+	int WSAError = WSAStartup( MAKEWORD( 2, 0 ), &wsaData ); 
+	if( WSAError != 0 )
 	{
-		WSADATA wsaData;
-		int WSAError = WSAStartup( MAKEWORD( 2, 0 ), &wsaData ); 
-		if( WSAError != 0 )
-		{
-			fprintf( stderr, "WSAStartup errno = %d\n", WSAError );
-			exit( -1 );
-		}
+		fprintf( stderr, "WSAStartup errno = %d\n", WSAError );
+		exit( -1 );
 	}
-	void OSCleanup( void )
-	{
-		WSACleanup();
-	}
-	#define perror(string) fprintf( stderr, string ": WSA errno = %d\n", WSAGetLastError() )
-#else
-	#include <sys/socket.h> //for sockaddr, socket, socket
-	#include <sys/types.h> //for size_t
-	#include <netdb.h> //for getaddrinfo
-	#include <netinet/in.h> //for sockaddr_in
-	#include <arpa/inet.h> //for htons, htonl, inet_pton, inet_ntop
-	#include <errno.h> //for errno
-	#include <stdio.h> //for fprintf, perror
-	#include <unistd.h> //for close
-	#include <stdlib.h> //for exit
-	#include <string.h> //for memset
-	void OSInit( void ) {}
-	void OSCleanup( void ) {}
-#endif
+}
+void OSCleanup( void )
+{
+	WSACleanup();
+}
+#define perror(string) fprintf( stderr, string ": WSA errno = %d\n", WSAGetLastError() )
+
+#if(_WIN32_WINNT >= 0x0600)
+typedef struct pollfd {
+        SOCKET  fd;
+        SHORT   events;
+        SHORT   revents;
+} WSAPOLLFD, *PWSAPOLLFD, FAR *LPWSAPOLLFD;
+WINSOCK_API_LINKAGE int WSAAPI WSAPoll(LPWSAPOLLFD fdArray, ULONG fds, INT timeout);
+#endif // (_WIN32_WINNT >= 0x0600)
 
 int initialization();
-int connection( int internet_socket );
-void execution( int internet_socket );
-void cleanup( int internet_socket, int client_internet_socket );
+void connexecution(int internet_socket);
+void closefdSocket(struct pollfd** fdsArr, uint32_t** toguessArr,int* size, int toRemove);
+void cleanup( int internet_socket);
 
 int main( int argc, char * argv[] )
 {
@@ -53,23 +52,25 @@ int main( int argc, char * argv[] )
 	int internet_socket = initialization();
 
 	//////////////
-	//Connection//
+	//Connection + Execution//
 	//////////////
 
-	int client_internet_socket = connection( internet_socket );
+	connexecution(internet_socket);
+
+	// printf("fdsArray now has listening socket on %d\n", fdsArr[0].fd);
 
 	/////////////
 	//Execution//
 	/////////////
 
-	execution( client_internet_socket );
+	// execution( client_internet_socket );
 
 
 	////////////
 	//Clean up//
 	////////////
 
-	cleanup( internet_socket, client_internet_socket );
+	cleanup( internet_socket);
 
 	OSCleanup();
 
@@ -137,86 +138,116 @@ int initialization()
 		fprintf( stderr, "socket: no valid socket address found\n" );
 		exit( 2 );
 	}
+	int timeout = 1;
+	setsockopt(internet_socket,SOL_SOCKET,SO_RCVTIMEO,(const char*)&timeout,sizeof(timeout));
 
 	return internet_socket;
 }
 
-int connection( int internet_socket )
-{
-	//Step 2.1
-	struct sockaddr_storage client_internet_address;
-	socklen_t client_internet_address_length = sizeof client_internet_address;
-	int client_socket = accept( internet_socket, (struct sockaddr *) &client_internet_address, &client_internet_address_length );
-	if( client_socket == -1 )
-	{
-		perror( "accept" );
-		closesocket( internet_socket );
-		exit( 3 );
-	}
-	return client_socket;
-}
+void connexecution(int internet_socket){
+	struct pollfd* fdsArr = (struct pollfd*)malloc(sizeof(struct pollfd));
+	uint32_t* toguessArr = malloc(sizeof(uint32_t));
+	int arraySize = 1;
+	fdsArr[0].fd = internet_socket;
+	fdsArr[0].events = 0x0100|0x200;
+	toguessArr[0] = 0;
 
-void execution( int internet_socket )
-{
-	//Step 3.1
-	uint32_t number_to_guess = rand()%1000000;
-	int number_of_bytes_received = 0;
-	uint32_t guessed_number;
-	printf("numer %ld\n",number_to_guess);
-
+	int pollRes; 
 	while(1){
-		number_of_bytes_received = recv( internet_socket, (char*)&guessed_number, ( sizeof guessed_number ), 0 );
-		if( number_of_bytes_received == -1 )
+		pollRes = WSAPoll(fdsArr,arraySize,-1);
+		if (pollRes == -1)
 		{
-			perror( "recv" );
+			perror("Polling");
 			break;
 		}
-		else
-		{
-			//Go from network byte order to 'normal' byte order
-			guessed_number = htonl(guessed_number);
-			printf( "Received : %d\n", guessed_number );
-		}
+		if(pollRes>0){
+			if(fdsArr[0].revents & 0x0100){
+				//New connection needs to be made
+				//Step 2.1
+				struct sockaddr_storage client_internet_address;
+				socklen_t client_internet_address_length = sizeof client_internet_address;
+				int client_socket = accept( internet_socket, (struct sockaddr *) &client_internet_address, &client_internet_address_length );
+				if( client_socket == -1 )
+				{
+					perror( "accept" );
+					closesocket( internet_socket );
+					exit( 3 );
+				} else {
+					arraySize++;
+					fdsArr = realloc(fdsArr, arraySize*sizeof(struct pollfd));
+					toguessArr = realloc(toguessArr, arraySize*sizeof(uint32_t));
+					fdsArr[arraySize-1].fd = client_socket;
+					fdsArr[arraySize-1].events = 0x0100;
+					fdsArr[arraySize-1].revents = 0;
+					toguessArr[arraySize-1] = (rand()<<6)%1000000;
+				}
+			}
+			for(int i=1;i<arraySize;i++){
+				if(fdsArr[i].revents & 0x0002){
+					//Socket was closed
+					closefdSocket(&fdsArr,&toguessArr,&arraySize,i);
+				}
+				if(fdsArr[i].revents & 0x0100){
+					uint32_t guessed_number;
+					int number_of_bytes_received = recv( fdsArr[i].fd, (char*)&guessed_number, ( sizeof guessed_number ), 0 );
+					if( number_of_bytes_received == -1 )
+					{
+						perror( "recv" );
+						break;
+					}
+					else
+					{
+						//Go from network byte order to 'normal' byte order
+						guessed_number = htonl(guessed_number);
+					}
 
-		//Step 3.2
-		int number_of_bytes_send = 0;
-		if(guessed_number < number_to_guess){
-			number_of_bytes_send = send( internet_socket, "Higher!", 7, 0 );
-			if( number_of_bytes_send == -1 )
-			{
-				perror( "send" );
+					//Step 3.2
+					int number_of_bytes_send = 0;
+					if(guessed_number < toguessArr[i]){
+						number_of_bytes_send = send( fdsArr[i].fd, "Higher!", 7, 0 );
+						if( number_of_bytes_send == -1 )
+						{
+							perror( "send" );
+						}
+					} else if (guessed_number > toguessArr[i]){
+						number_of_bytes_send = send( fdsArr[i].fd, "Lower!", 6, 0 );
+						if( number_of_bytes_send == -1 )
+						{
+							perror( "send" );
+						}
+					} else {
+						number_of_bytes_send = send( fdsArr[i].fd, "Correct!", 8, 0 );
+						if( number_of_bytes_send == -1 )
+						{
+							perror( "send" );
+						}
+					}
+				}
 			}
-		} else if (guessed_number > number_to_guess){
-			number_of_bytes_send = send( internet_socket, "Lower!", 6, 0 );
-			if( number_of_bytes_send == -1 )
-			{
-				perror( "send" );
-			}
-		} else {
-			number_of_bytes_send = send( internet_socket, "Correct!", 8, 0 );
-			if( number_of_bytes_send == -1 )
-			{
-				perror( "send" );
-			}
-			break;
 		}
-	
 		
-		memset(&guessed_number,0,sizeof(guessed_number));
+		
+
 	}
-	
 }
 
-void cleanup( int internet_socket, int client_internet_socket )
-{
-	//Step 4.2
-	int shutdown_return = shutdown( client_internet_socket, SD_RECEIVE );
-	if( shutdown_return == -1 )
-	{
-		perror( "shutdown" );
+void closefdSocket(struct pollfd** fdsArr, uint32_t** toguessArr,int* size,int toRemove){
+	//close socket
+	closesocket((*fdsArr)[toRemove].fd);
+	//Shift each item in array to their left
+	for(int i=toRemove;i<*size-1;i++){
+		(*fdsArr)[i] = (*fdsArr)[i+1];
+		(*toguessArr)[i] = (*toguessArr)[i+1];
+		
 	}
+	*size=*size-1;
+	//Reallocate memory to proper size
+	*fdsArr = realloc(*fdsArr,*size*sizeof(struct pollfd));
+	*toguessArr = realloc(*toguessArr,*size*sizeof(uint32_t));
+}
 
+void cleanup( int internet_socket)
+{
 	//Step 4.1
-	closesocket( client_internet_socket );
 	closesocket( internet_socket );
 }
