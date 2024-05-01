@@ -149,15 +149,14 @@ void execution( int internet_socket )
 	number_of_bytes_received = recv( internet_socket, buffer, sizeof(buffer) - 1, 0 );
 	if( number_of_bytes_received == -1 )
 	{
-		perror( "recv" );
-		
+		perror( "recv" );		
 	}
 	else if (number_of_bytes_received ==0)
 	{
 		printf("Server disconnected");
-		    cleanup(internet_socket);
-			OSCleanup();
-            exit(0);
+		cleanup(internet_socket);
+		OSCleanup();
+        exit(0);
 	}
 	else
 	{
@@ -183,11 +182,16 @@ void cleanup( int internet_socket )
 	printf("Clean up correctly\n");
 }
 
+
 int32_t message_to_send()
 {	
 	int32_t number;
 	printf("Make your guess between 0 and 1000000: ");
 	scanf("%d",&number);
+	if(number < 0 || number > 1000000)
+	{
+		message_to_send();
+	}
 	return number;
 }
 
@@ -196,30 +200,16 @@ void check_for_win(char *buffer, int internet_socket)
     if (strcmp(buffer, "Correct!") == 0)
     {
         char play_again;
-       // printf("Congratulations! You guessed the correct number!\n");
         printf("Do you want to play again? (Y/N): ");
-        scanf(" %c", &play_again); // Note the space before %c to consume any previous newline characters
+        scanf(" %c", &play_again); 
 
         if (play_again == 'Y' || play_again == 'y')
         {
-            // Send a message to server to indicate the client wants to play again
-            int32_t play_again_msg = htonl(1); // You can choose any value to represent play again
-            int number_of_bytes_send = send(internet_socket, (const char*) &play_again_msg, sizeof(int32_t), 0);
-            if (number_of_bytes_send == -1)
-            {
-                perror("Play again Send error: ");
-            }
-        }
+			execution(internet_socket );
+		}
         else
         {
-            // Send a message to server to indicate the client wants to stop playing
-            int32_t stop_playing_msg = htonl(0); // You can choose any value to represent stop playing
-            int number_of_bytes_send = send(internet_socket, (const char*) &stop_playing_msg, sizeof(int32_t), 0);
-            if (number_of_bytes_send == -1)
-            {
-                perror("Stop send: ");
-            }
-
+            
             cleanup(internet_socket);
 			OSCleanup();
             exit(0);

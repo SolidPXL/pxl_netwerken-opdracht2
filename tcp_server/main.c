@@ -27,6 +27,7 @@ void OSCleanup( void )
 }
 #define perror(string) fprintf( stderr, string ": WSA errno = %d\n", WSAGetLastError() )
 
+
 #if(_WIN32_WINNT >= 0x0600)
 typedef struct pollfd {
         SOCKET  fd;
@@ -35,6 +36,7 @@ typedef struct pollfd {
 } WSAPOLLFD, *PWSAPOLLFD, FAR *LPWSAPOLLFD;
 WINSOCK_API_LINKAGE int WSAAPI WSAPoll(LPWSAPOLLFD fdArray, ULONG fds, INT timeout);
 #endif // (_WIN32_WINNT >= 0x0600)
+
 
 int initialization();
 void connexecution(int internet_socket);
