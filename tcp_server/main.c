@@ -27,19 +27,20 @@ void OSCleanup( void )
 }
 #define perror(string) fprintf( stderr, string ": WSA errno = %d\n", WSAGetLastError() )
 
-#if(_WIN32_WINNT >= 0x0600)
-typedef struct pollfd {
-        SOCKET  fd;
-        SHORT   events;
-        SHORT   revents;
-} WSAPOLLFD, *PWSAPOLLFD, FAR *LPWSAPOLLFD;
-WINSOCK_API_LINKAGE int WSAAPI WSAPoll(LPWSAPOLLFD fdArray, ULONG fds, INT timeout);
-#endif // (_WIN32_WINNT >= 0x0600)
+// #if(_WIN32_WINNT >= 0x0600)
+// typedef struct pollfd {
+//         SOCKET  fd;
+//         SHORT   events;
+//         SHORT   revents;
+// } WSAPOLLFD, *PWSAPOLLFD, FAR *LPWSAPOLLFD;
+// WINSOCK_API_LINKAGE int WSAAPI WSAPoll(LPWSAPOLLFD fdArray, ULONG fds, INT timeout);
+// #endif // (_WIN32_WINNT >= 0x0600)
 
 int initialization();
 void connexecution(int internet_socket);
 void closefdSocket(struct pollfd** fdsArr, uint32_t** toguessArr,int* size, int toRemove);
 void cleanup( int internet_socket);
+void log_guess(int internet_socket , const char *ip_adresss, uint32_t guessed_number);
 
 int main( int argc, char * argv[] )
 {
@@ -202,21 +203,38 @@ void connexecution(int internet_socket){
 					}
 
 					//Step 3.2
+
+					//Get client IP out of socket.
+					struct sockaddr_storage client_addr;
+					socklen_t addr_len = sizeof(client_addr);
+					if (getpeername(fdsArr[i].fd, (struct sockaddr *)&client_addr, &addr_len) == -1) {
+						perror("getpeername");
+						closesocket(fdsArr[i].fd);
+						return;
+					}
+					char client_ip[INET_ADDRSTRLEN]; //macro only for IPv4
+					inet_ntop(AF_INET, &((struct sockaddr_in *)&client_addr)->sin_addr, client_ip, INET_ADDRSTRLEN); //converts to human readable language
+					// char client_ip[INET_ADDRSTRLEN] = inet_ntoa(*((struct in_addr*)&client_addr));
+
+
 					int number_of_bytes_send = 0;
 					if(guessed_number < toguessArr[i]){
 						number_of_bytes_send = send( fdsArr[i].fd, "Higher!", 7, 0 );
+						log_guess(internet_socket , client_ip, guessed_number);
 						if( number_of_bytes_send == -1 )
 						{
 							perror( "send" );
 						}
 					} else if (guessed_number > toguessArr[i]){
 						number_of_bytes_send = send( fdsArr[i].fd, "Lower!", 6, 0 );
+						log_guess(internet_socket , client_ip, guessed_number);
 						if( number_of_bytes_send == -1 )
 						{
 							perror( "send" );
 						}
 					} else {
 						number_of_bytes_send = send( fdsArr[i].fd, "Correct!", 8, 0 );
+						log_guess(internet_socket , client_ip, guessed_number);
 						if( number_of_bytes_send == -1 )
 						{
 							perror( "send" );
@@ -250,4 +268,22 @@ void cleanup( int internet_socket)
 {
 	//Step 4.1
 	closesocket( internet_socket );
+}
+
+void log_guess(int internet_socket , const char *ip_adresss, uint32_t guessed_number)
+{
+	time_t current_time;
+	char time_stamp[20];
+	struct tm *time_info;
+	
+	time(&current_time);
+	time_info = localtime(&current_time);
+	strftime(time_stamp,sizeof(time_stamp), "%Y-%m-%d %H:%M:%S", time_info);
+	
+	FILE *file = fopen("file.log", "a");
+	if (file != NULL)
+	{
+		fprintf(file, "[%s] socket : %d\tIP: %s\tguessed : %u\n",time_stamp,internet_socket,ip_adresss,guessed_number);
+		fclose(file);
+	}
 }
